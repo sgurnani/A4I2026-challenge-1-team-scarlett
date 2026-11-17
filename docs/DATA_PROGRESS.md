@@ -142,14 +142,63 @@ of an air-offset target, never values added directly to a forecast.
 Eight model tests, read-only preflight, complete prediction/label checks and
 typechecks passed. See [enriched_model.md](sources/enriched_model.md).
 
-## Priority 6
+## Priority 6 — network and preliminary routes validated
 
-In progress. Regional routing acquisition was prepared independently.
-Operator readiness remains unconfirmed; routes to listed indoor facilities
-will be labeled preliminary. Traffic-aware truck times require an appropriate
-provider and vehicle/depot assumptions.
+Outputs: `routing_nodes`, `routing_edges`, `routing_entrances`,
+`routing_constraints`, `routing_turn_restrictions`, `routing_source`,
+`cooling_routes`, `truck_travel_times` and `routing_access_review`.
 
-## Reproduce priority 1
+- Regional OSM/BBBike extract: 1,377,438 nodes and 1,786,275 segments, including
+  1,762,977 walking-permitted and 825,426 truck-permitted segments.
+- 7,230 entrances and 4,786 turn relations retained, with complete relation
+  members. Conditional/via-way restrictions are preserved; unsupported truck
+  rules conservatively exclude 810 originating ways from routing.
+- The local reusable graph builds in about eight seconds with peak memory
+  about 1,384 MiB. Candidate queries search all 134 listed indoor sites.
+- Twenty results cover ten priority cells in both modes. All ten walking routes
+  and nine truck routes have mapped paths. Walking network distances range
+  833–3,170 metres; estimated times are 14.2–53.8 minutes at 60 metres/minute,
+  including separately recorded, unverified endpoint connectors.
+- Cell `13954_-21918` has an unavailable truck route under the chosen snap:
+  the nearest node is on a two-node service-road component whose exits have
+  mapped gates without vehicle-access permission tags. An alternative staging
+  node 64.41 metres from the center has a 1,615-metre mapped route to listed
+  Central West. Its connection to the center needs review. The failed route
+  is retained; `routing_access_review` records the source-node/way evidence.
+- Truck durations remain null. No traffic, vehicle-clearance, entrance,
+  wheelchair, opening, working-AC or connector verification is inferred.
+
+Twelve routing tests, two provenance tests, live node/edge/route assertions and
+typechecks passed. The opt-in toolset now has **15 live-verified SQL tools**,
+including route retrieval. See [routing_network.md](sources/routing_network.md).
+
+## Final audit and remaining operational inputs
+
+The working dataset contains **36 tables/views and two candidate models**,
+with **3,663,979 rows in native tables**. Views do not add to that total.
+Final checks confirm 5,053 context cells, zero changed heat labels/splits,
+all 187 legacy school source rows, 35,371 model predictions and 20 route results.
+All **38 baseline snapshots** and **four backup model copies** remain present.
+All 11 changed/source Python files pass mypy. Evidence is saved in ignored
+`data/enrichment/priorities/final_verification.json` and per-job progress files.
+
+The engineering outputs for priorities 1–6 are published and validated. Actual
+operator readiness is still pending; truck travel times need traffic/provider,
+vehicle and depot inputs, and the gated origin needs staging-point review.
+November 17 is the validation date, not an asserted heat emergency. Production
+agent/Toolbox settings have not been switched by this enrichment work.
+
+Source table archives remain local as well as in the recovery dataset. Raw
+acquisition snapshots are cached locally; derived working tables are in
+BigQuery and reproduced by the scripts. Git contains code and documentation,
+not raw source archives.
+
+## Reproduce the workflow
+
+Prerequisites: the original recovery baseline in BigQuery and acquisition caches
+described in [DATA_ENRICHMENT.md](DATA_ENRICHMENT.md), including tract geometry,
+facility source snapshots, CTA GTFS and NWS forecasts. Fetch geometry/social
+sources first when starting from a fresh checkout.
 
 ```bash
 .venv/bin/python scripts/load_chicago_acs_aligned.py
@@ -164,6 +213,10 @@ provider and vehicle/depot assumptions.
 .venv/bin/python scripts/run_data_priorities.py event --event-date 2026-11-17
 .venv/bin/python scripts/evaluate_enriched_model.py --include-lst --execute
 # For an existing pair of candidate models, add --score-only to reevaluate.
+.venv/bin/python scripts/load_chicago_routing.py
+.venv/bin/python scripts/run_data_priorities.py routing
+.venv/bin/python scripts/build_cooling_routes.py --event-date 2026-11-17
+.venv/bin/python scripts/check_enriched_tools.py
 ```
 
 The runner writes only to a separate working dataset and records completed

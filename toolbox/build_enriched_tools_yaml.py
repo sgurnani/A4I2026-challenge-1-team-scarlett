@@ -132,6 +132,17 @@ def build() -> list[dict]:
         f"WHERE @facility_id='any' OR f.facility_id=@facility_id ORDER BY facility_name,facility_id LIMIT @limit",
         [event_date, {"name": "facility_id", "type": "string", "default": "any",
                       "description": "Canonical facility ID from facility tools, or any for a sample."}, legacy.p_limit(5, 50)]),
+        legacy.tool(
+        "get_cooling_routes",
+        "Precomputed preliminary network routes from a ranked cell to listed indoor inventory candidates for "
+        "the explicit planning date. Network paths and straight-line connectors are separate. Walking minutes "
+        "assume 60 metres/minute; truck duration and live traffic are unavailable. Facility opening/working AC, "
+        "entrance, connectors, wheelchair access and vehicle clearances remain unverified. Zero rows means no prepared route.",
+        f"SELECT * FROM `{WORK}.cooling_routes` WHERE event_date=DATE(@event_date) "
+        f"AND cell_id=@cell_id AND mode=@mode ORDER BY origin_priority_rank",
+        [event_date, {"name": "cell_id", "type": "string",
+                      "description": "Cell ID from ranked priority sites; routes are prepared for the top ten cells."},
+         {"name": "mode", "type": "string", "default": "walk", "description": "walk or truck; truck duration is unavailable."}]),
     ]
     toolset = docs.pop()
     docs.extend(additions)

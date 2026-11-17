@@ -716,6 +716,26 @@ parameters:
   maxValue: 50
   description: How many rows to return (default 5, max 50).
 ---
+kind: tool
+name: get_cooling_routes
+type: bigquery-sql
+source: heat-bq
+description: |
+  Precomputed preliminary network routes from a ranked cell to listed indoor inventory candidates for the explicit planning date. Network paths and straight-line connectors are separate. Walking minutes assume 60 metres/minute; truck duration and live traffic are unavailable. Facility opening/working AC, entrance, connectors, wheelchair access and vehicle clearances remain unverified. Zero rows means no prepared route.
+statement: |
+  SELECT * FROM `${GOOGLE_CLOUD_PROJECT}.${BQ_ENRICHED_DATASET:a4i_climate_work_v2}.cooling_routes` WHERE event_date=DATE(@event_date) AND cell_id=@cell_id AND mode=@mode ORDER BY origin_priority_rank
+parameters:
+- name: event_date
+  type: string
+  description: Explicit planning date in YYYY-MM-DD format; absent dates have no prepared snapshot.
+- name: cell_id
+  type: string
+  description: Cell ID from ranked priority sites; routes are prepared for the top ten cells.
+- name: mode
+  type: string
+  default: walk
+  description: walk or truck; truck duration is unavailable.
+---
 kind: toolset
 name: heat_dispatch_enriched
 tools:
@@ -733,3 +753,4 @@ tools:
 - get_event_weather
 - get_event_transit
 - get_cooling_readiness
+- get_cooling_routes

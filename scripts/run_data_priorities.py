@@ -224,10 +224,31 @@ class WorkRunner:
         evidence = self.sql("04_event_data.sql", {"EVENT_DATE": event_date})
         self.complete("4", {"event_date": event_date, "event_run": str(directory), "event": evidence})
 
+    def routing(self) -> None:
+        from load_chicago_routing import SCHEMAS
+
+        if "5" not in self.report["priorities"]:
+            raise ValueError("Validate priority 5 before priority 6 publication")
+        directory = ROOT / "data/enrichment/routing_citywide"
+        manifest = json.loads((directory / "manifest.json").read_text())
+        for name, schema in SCHEMAS.items():
+            count = self.load_file(name, directory / f"{name}.jsonl", schema)
+            if count != manifest["row_counts"][name]:
+                raise ValueError(f"Routing source count mismatch: {name}")
+        self.load("routing_source", [{"source": manifest["source"], "retrieved_at": manifest["retrieved_at"],
+                  "source_last_modified": manifest["source_last_modified"], "source_sha256": manifest["sha256"],
+                  "license": manifest["license"], "attribution": manifest["attribution"],
+                  "manifest_json": json.dumps(manifest)}], [("source", "STRING"), ("retrieved_at", "TIMESTAMP"),
+                  ("source_last_modified", "STRING"), ("source_sha256", "STRING"), ("license", "STRING"),
+                  ("attribution", "STRING"), ("manifest_json", "STRING")])
+        evidence = self.sql("06_routing_network.sql")
+        self.report["routing_network"] = json_value(evidence)
+        save_json(self.report_path, self.report)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["geography", "census", "facilities", "context", "event"])
+    parser.add_argument("stage", choices=["geography", "census", "facilities", "context", "event", "routing"])
     parser.add_argument("--event-date", default="2026-11-17")
     parser.add_argument("--project", default="qwiklabs-gcp-04-3e58e01275b8")
     parser.add_argument("--source-dataset", default="a4i_climate_backup_20261117_214035")

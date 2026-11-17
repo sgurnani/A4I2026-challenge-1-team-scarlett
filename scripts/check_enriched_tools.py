@@ -26,7 +26,12 @@ def main() -> int:
     client = Client(project=project, location="US", credentials=gcloud_credentials())
     docs = [doc for doc in build_enriched_tools_yaml.build() if doc["kind"] == "tool"]
     defaults: dict[str, Any] = {"latitude": 41.8781, "longitude": -87.6298, "limit": 2,
-                                "event_date": "2026-11-17", "cell_id": "13959_-21908", "mode": "walking"}
+                                "event_date": "2026-11-17", "cell_id": "13959_-21908", "mode": "walk"}
+    routes_file = ROOT / "data/enrichment/routing_citywide/priority_routes.json"
+    if routes_file.exists():
+        prepared_routes = json.loads(routes_file.read_text())
+        if prepared_routes:
+            defaults["cell_id"] = prepared_routes[0]["cell_id"]
     types = {"integer": "INT64", "float": "FLOAT64", "string": "STRING", "boolean": "BOOL"}
 
     def check(doc: dict) -> dict:
