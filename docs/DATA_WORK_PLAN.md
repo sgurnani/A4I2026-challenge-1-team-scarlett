@@ -18,7 +18,8 @@ restores and a snapshot restore of all 187 high-school records passed.
 See [DATA_RECOVERY.md](DATA_RECOVERY.md) for evidence and restoration steps.
 
 **Recommendation:** create a separate `a4i_climate_work_v2` dataset for the work
-below. That dataset and these proposed outputs have not been created. Preserve
+below. That dataset and priorities 1–3 outputs are now created and validated;
+see [DATA_PROGRESS.md](DATA_PROGRESS.md). Preserve
 the current `a4i_climate` tables and model names until outputs pass validation
 and an explicit consumer switch is agreed. Keep source inventories separate
 from reconciled outputs and operator-entered readiness records.

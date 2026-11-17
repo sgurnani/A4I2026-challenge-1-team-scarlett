@@ -36,10 +36,61 @@ universe consistency and unchanged labels/splits. Fourteen focused tests and
 the acquisition/runner typechecks passed. Job IDs and aggregate results are
 recorded in ignored `data/enrichment/priorities/progress.json`.
 
-## Priorities 2–6
+## Priority 2 — inventory validated; operator readiness pending
 
-In progress. Facility reconciliation and regional routing acquisition were
-prepared independently while priority 1 ran. Event-date validation initially
+Outputs: `canonical_facilities`, `facility_source_crosswalk`, `facility_crosswalk`,
+`facility_readiness_seed`, `facility_readiness`, plus compatibility views.
+
+- 995 canonical facilities and 2,463 source rows; all 187 legacy schools remain
+  individually linked. There are 170 high-school candidates in the imported
+  CPS snapshot, and 35 legacy schools lack a matching newer CPS record.
+- 106 legacy school coordinates disagree by more than 250 metres with matched
+  newer CPS coordinates. The newer source coordinates are preferred; every
+  original location and conflict remains in the crosswalk.
+- The conservative subset contains 134 listed indoor inventory sites. All 43
+  Park District facilities and school candidates retain unconfirmed cooling
+  eligibility. No working AC, public opening, capacity or staffing is inferred.
+- All 995 readiness seeds are unconfirmed. Inventory refreshes insert only
+  missing seed records; they never replace operator confirmations.
+- Source metadata identifies legacy schools as 2013–2014, imported CPS locations
+  as 2025–2026 and cooling inventory as Summer 2024. Snapshot membership is not
+  evidence of current operation. See [facility_crosswalk.md](sources/facility_crosswalk.md).
+
+## Priority 3 — context and opt-in toolset validated
+
+`site_context_enriched` has 5,053 unique cells, unchanged labels/splits and no
+missing Census joins. It retains two missing surface offsets, 39 cells with
+fewer than five Landsat scenes, 38 cells without a housing-burden rate and 37
+cells without a vulnerability rank as explicit gaps. Geographic dispatch
+candidates exclude three Census city-boundary disagreements and unknown ranks;
+the full context and evaluation cohort remain intact.
+
+The generated `toolbox/tools.enriched.yaml` supplies the opt-in
+`heat_dispatch_enriched` toolset. All 11 original tool SQL queries passed live
+BigQuery execution, including 494 distinct inventory/candidate listings and
+784 tract map records. Population summaries use household and poverty universes
+correctly. The frozen original air-offset model continues to receive its
+unchanged physical inputs; the new physical layers are reported as context.
+
+Deterministic dispatch assembly preserves readiness flags and no longer invents
+school AC-gym hours or large-capacity shelter claims. Thirty-three focused
+dispatch/tool tests and changed-file typechecks passed. Production agent/Toolbox
+configuration has not been switched.
+
+To prepare a separate local Toolbox server and connect the existing agent:
+
+```bash
+.venv/bin/python toolbox/build_enriched_tools_yaml.py
+.venv/bin/python scripts/render_toolbox.py \
+  --src toolbox/tools.enriched.yaml --out toolbox/tools.enriched.rendered.yaml
+# Serve that rendered file with MCP Toolbox, then set TOOLBOX_URL to its endpoint
+# and TOOLBOX_TOOLSET=heat_dispatch_enriched for the agent process.
+```
+
+## Priorities 4–6
+
+In progress. Regional routing acquisition and model/event preparation were
+prepared independently. Event-date validation initially
 uses November 17, 2026 unless the team specifies another planning date; this
 does not imply a heat event is occurring on that date.
 
@@ -49,6 +100,11 @@ does not imply a heat event is occurring on that date.
 .venv/bin/python scripts/load_chicago_acs_aligned.py
 .venv/bin/python scripts/run_data_priorities.py geography
 .venv/bin/python scripts/run_data_priorities.py census
+.venv/bin/python scripts/reconcile_facilities.py --fetch \
+  --project qwiklabs-gcp-04-3e58e01275b8
+.venv/bin/python scripts/run_data_priorities.py facilities
+.venv/bin/python scripts/run_data_priorities.py context
+.venv/bin/python scripts/check_enriched_tools.py
 ```
 
 The runner writes only to a separate working dataset and records completed

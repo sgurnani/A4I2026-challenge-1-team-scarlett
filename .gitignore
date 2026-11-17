@@ -34,6 +34,7 @@ data/enrichment/
 agent/heat_dispatch/.env
 agent/heat_dispatch/.agent_engine_config.json
 toolbox/tools.rendered.yaml
+toolbox/tools.enriched.rendered.yaml
 .bin/
 
 # Web console

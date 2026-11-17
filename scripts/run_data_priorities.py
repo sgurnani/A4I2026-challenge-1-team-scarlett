@@ -37,7 +37,7 @@ def validate_targets(sql: str, project: str, work_dataset: str) -> None:
     if re.search(r"\b(DROP|TRUNCATE|DELETE|UPDATE|MERGE)\b", sql, re.I):
         raise ValueError("Destructive SQL is not supported by this runner")
     targets = re.findall(
-        r"\b(?:CREATE\s+(?:OR\s+REPLACE\s+)?(?:TABLE|MODEL|VIEW)|INSERT\s+INTO)\s+`([^`]+)`",
+        r"\b(?:CREATE\s+(?:OR\s+REPLACE\s+)?(?:TABLE|MODEL|VIEW)(?:\s+IF\s+NOT\s+EXISTS)?|INSERT\s+INTO)\s+`([^`]+)`",
         sql, re.I,
     )
     if any(not target.startswith(f"{project}.{work_dataset}.") for target in targets):
@@ -153,10 +153,30 @@ class WorkRunner:
         evidence = self.sql("01_tract_vulnerability.sql")
         self.complete("1", {"geography": self.report["geography"], "census": evidence})
 
+    def facilities(self) -> None:
+        from reconcile_facilities import SCHEMAS
+
+        if "1" not in self.report["priorities"]:
+            raise ValueError("Validate priority 1 before publishing priority 2")
+        directory = ROOT / "data/enrichment/reconciled_facilities"
+        for name, schema in SCHEMAS.items():
+            rows = [json.loads(line) for line in (directory / f"{name}.jsonl").read_text().splitlines() if line.strip()]
+            # Source refreshes must never replace operator confirmations.
+            destination = "facility_readiness_seed" if name == "facility_readiness" else name
+            self.load(destination, rows, schema)
+        evidence = self.sql("02_facilities.sql")
+        self.complete("2", {"data_validated": evidence, "operator_confirmations_pending": True})
+
+    def context(self) -> None:
+        if "2" not in self.report["priorities"]:
+            raise ValueError("Validate priorities 1 and 2 before context publication")
+        evidence = self.sql("03_site_context.sql")
+        self.complete("3", {"context": evidence, "production_consumer_switched": False})
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["geography", "census"])
+    parser.add_argument("stage", choices=["geography", "census", "facilities", "context"])
     parser.add_argument("--project", default="qwiklabs-gcp-04-3e58e01275b8")
     parser.add_argument("--source-dataset", default="a4i_climate_backup_20261117_214035")
     parser.add_argument("--work-dataset", default="a4i_climate_work_v2")

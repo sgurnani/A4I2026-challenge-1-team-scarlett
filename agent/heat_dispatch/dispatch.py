@@ -45,13 +45,14 @@ def reverse_geocode(lat: float, lon: float) -> str | None:
 
 def _f(row: dict, key: str, default: float = 0.0) -> float:
     try:
-        return float(row.get(key))
+        value = row.get(key)
+        return default if value is None else float(value)
     except (TypeError, ValueError):
         return default
 
 
 def pick_hydration_stops(sites: list[dict], forecast_high_f: float, n: int) -> list[dict]:
-    stops = []
+    stops: list[dict] = []
     for s in sites[:n]:
         offset = _f(s, "predicted_offset_f")
         stops.append({
@@ -65,6 +66,8 @@ def pick_hydration_stops(sites: list[dict], forecast_high_f: float, n: int) -> l
             "poverty_rate": s.get("poverty_rate"),
             "km_to_indoor_cooling": s.get("km_to_indoor_cooling"),
             "nearest_cooling": " - ".join(x for x in (s.get("nearest_cooling_name"), s.get("nearest_cooling_address")) if x),
+            "cooling_readiness_status": s.get("nearest_cooling_status") or "Inventory listing; event readiness unconfirmed",
+            "cooling_event_verified": s.get("nearest_cooling_event_verified") is True,
             "measured": (s.get("measured_readings") or 0) > 0,
             "measured_offset_f": s.get("measured_offset_f"),
             "tract_geo_id": s.get("tract_geo_id"), "neighborhood": s.get("neighborhood"),
@@ -99,7 +102,7 @@ def pick_high_schools(sites: list[dict], n: int) -> list[dict]:
         facility_type = s.get("nearest_cooling_type", "")
         if not name or name in seen:
             continue
-        if "High School" in facility_type or "HS" in name or "High School" in name or "Academy" in name:
+        if s.get("nearest_high_school_name") or "High School" in facility_type or "HS" in name or "High School" in name or "Academy" in name:
             km = _f(s, "km_to_high_school", _f(s, "km_to_indoor_cooling", 99))
             if km > HIGH_SCHOOL_MAX_KM:
                 continue
@@ -107,7 +110,8 @@ def pick_high_schools(sites: list[dict], n: int) -> list[dict]:
             out.append({
                 "high_school": name,
                 "address": s.get("nearest_high_school_address") or s.get("nearest_cooling_address") or "",
-                "current_hours": s.get("nearest_high_school_hours") or "Mon-Fri 7AM-7PM (Emergency AC Gymnasium Cooling)",
+                "current_hours": s.get("nearest_high_school_hours"),
+                "readiness_status": s.get("nearest_high_school_status") or "Candidate; event opening, working AC and public access unconfirmed",
                 "km_from_site": km,
                 "serves_site_rank": rank,
             })
@@ -117,7 +121,7 @@ def pick_high_schools(sites: list[dict], n: int) -> list[dict]:
 
 
 def pick_wellness_teams(tracts: list[dict], n: int) -> list[dict]:
-    teams = []
+    teams: list[dict] = []
     for t in tracts[:n]:
         teams.append({
             "team": len(teams) + 1, "tract_geo_id": t.get("tract_geo_id"), "neighborhood": t.get("neighborhood"),
@@ -159,6 +163,8 @@ def render_sheet(forecast_high_f: float, stops: list[dict], teams: list[dict], l
                 where += f"<br>{s['approx_address']}"
             who = f"{s.get('residents_65_plus', '?')} aged 65+, {s.get('households_without_car', '?')} homes w/o car"
             near = f"{s['nearest_cooling'] or 'n/a'} ({s.get('km_to_indoor_cooling', '?')} km)"
+            if not s.get("cooling_event_verified"):
+                near += " — event readiness unconfirmed"
             temp = f"{s['expected_air_temp_f']}°F ({s['predicted_offset_f']:+.1f})"
             tag = "" if s["measured"] else " *(model prediction, never measured)*"
             md.append(f"| {s['stop']} | {where} | {temp}{tag} | {s['why_hot'] or 'n/a'} | {who} | {near} |")
@@ -180,10 +186,11 @@ def render_sheet(forecast_high_f: float, stops: list[dict], teams: list[dict], l
     else:
         md.append("_No library within 2.5 km of a recommended stop._")
     if high_schools:
-        md += ["", "## 4. Emergency high school cooling gymnasiums"]
+        md += ["", "## 4. High school cooling candidates"]
         for hs in high_schools:
             md.append(f"- **{hs['high_school']}**, {hs['address']}: serves site #{hs['serves_site_rank']} "
-                      f"({hs['km_from_site']} km). Large-capacity AC gym cooling shelter. ({hs['current_hours']})")
+                      f"({hs['km_from_site']} km). {hs.get('readiness_status', 'Event readiness unconfirmed')}. "
+                      f"Listed hours: {hs['current_hours'] or 'unknown'}.")
     md += ["", "## Equity check on this plan"]
     lines = audit_lines(audit)
     md += lines if lines else ["_Not yet run: call equity_audit with the same parameters before sending this plan._"]
