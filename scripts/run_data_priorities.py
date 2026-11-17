@@ -122,6 +122,40 @@ class WorkRunner:
             "completed_at": dt.datetime.now(dt.timezone.utc).isoformat(), "evidence": json_value(evidence)}
         save_json(self.report_path, self.report)
 
+    def load_file(self, name: str, path: Path, schema: list[tuple[str, str]],
+                  write_disposition: str = "WRITE_TRUNCATE") -> int:
+        from google.cloud.bigquery.job.load import LoadJobConfig
+        from google.cloud.bigquery.schema import SchemaField
+        from google.cloud.bigquery.table import Table
+
+        identifier(name)
+        destination = f"{self.project}.{self.work}.{name}"
+        fields = [SchemaField(field, kind) for field, kind in schema]
+        expected = {field for field, _ in schema}
+        count = 0
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for raw in handle:
+                digest.update(raw)
+                row = json.loads(raw)
+                if set(row) != expected:
+                    raise ValueError(f"Schema mismatch in {path}")
+                count += 1
+        if not count:
+            self.client.create_table(Table(destination, schema=fields), exists_ok=True)
+            return 0
+        with path.open("rb") as handle:
+            job = self.client.load_table_from_file(handle, destination, job_config=LoadJobConfig(
+                schema=fields, source_format="NEWLINE_DELIMITED_JSON", write_disposition=write_disposition))
+        job.result()
+        if job.output_rows != count:
+            raise ValueError(f"Load output count mismatch for {destination}")
+        self.report["jobs"].append({"label": f"load_{name}", "job_id": job.job_id,
+                                    "rows": count, "sha256": digest.hexdigest(), "file": str(path)})
+        save_json(self.report_path, self.report)
+        print(f"Loaded {name}: {count} rows", flush=True)
+        return count
+
     def geography(self) -> None:
         raw = ROOT / "data/enrichment/geography/raw"
         rows = []
@@ -173,16 +207,37 @@ class WorkRunner:
         evidence = self.sql("03_site_context.sql")
         self.complete("3", {"context": evidence, "production_consumer_switched": False})
 
+    def event(self, event_date: str = "2026-11-17") -> None:
+        from prepare_event_data import SCHEMAS
+
+        if "3" not in self.report["priorities"]:
+            raise ValueError("Validate priority 3 before event publication")
+        dt.date.fromisoformat(event_date)
+        runs = sorted((ROOT / "data/enrichment/event" / event_date).glob("*/manifest.json"))
+        if not runs:
+            raise ValueError("Prepare event data before publishing it")
+        directory = runs[-1].parent
+        # Overall validity is the commit marker: publish it after all run data.
+        names = [name for name in SCHEMAS if name != "event_data_validity"] + ["event_data_validity"]
+        for name in names:
+            self.load_file(name + "_history", directory / f"{name}.jsonl", SCHEMAS[name], "WRITE_APPEND")
+        evidence = self.sql("04_event_data.sql", {"EVENT_DATE": event_date})
+        self.complete("4", {"event_date": event_date, "event_run": str(directory), "event": evidence})
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["geography", "census", "facilities", "context"])
+    parser.add_argument("stage", choices=["geography", "census", "facilities", "context", "event"])
+    parser.add_argument("--event-date", default="2026-11-17")
     parser.add_argument("--project", default="qwiklabs-gcp-04-3e58e01275b8")
     parser.add_argument("--source-dataset", default="a4i_climate_backup_20261117_214035")
     parser.add_argument("--work-dataset", default="a4i_climate_work_v2")
     args = parser.parse_args()
     runner = WorkRunner(args.project, args.source_dataset, args.work_dataset)
-    getattr(runner, args.stage)()
+    if args.stage == "event":
+        runner.event(args.event_date)
+    else:
+        getattr(runner, args.stage)()
     return 0
 
 

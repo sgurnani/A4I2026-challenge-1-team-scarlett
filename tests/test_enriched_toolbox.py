@@ -13,7 +13,7 @@ def test_enriched_context_and_baseline_model_are_separate():
     assert enriched.SOURCE + '.heat_offset_model' in sql
     assert 'nearest_cooling_event_verified' in sql
     assert 'inside_census_chicago_place' in sql
-    assert tools.keys() == {d['name'] for d in legacy.build() if d['kind'] == 'tool'}
+    assert {d['name'] for d in legacy.build() if d['kind'] == 'tool'} <= tools.keys()
 
 
 def test_equity_audit_uses_household_and_poverty_universes():

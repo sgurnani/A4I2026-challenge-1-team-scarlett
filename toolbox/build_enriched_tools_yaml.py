@@ -50,7 +50,8 @@ def build() -> list[dict]:
             statement = statement.replace("n_obs AS measured_readings,",
                 "acs_year, tree_canopy_pct, impervious_pct, lst_offset_f AS surface_offset_f, n_scenes,\n"
                 "  surface_offset_missing, surface_low_scene_count, nearest_cooling_status,\n"
-                "  nearest_cooling_event_verified, original_tract_geo_id, tract_changed,\n"
+                "  nearest_cooling_event_verified, nearest_cooling_facility_id, nearest_library_facility_id,\n"
+                "  original_tract_geo_id, tract_changed,\n"
                 "  nearest_high_school_name, nearest_high_school_address, nearest_high_school_hours,\n"
                 "  nearest_high_school_status, km_to_high_school,\n"
                 "  n_obs AS measured_readings,")
@@ -65,6 +66,9 @@ def build() -> list[dict]:
             statement = statement.replace("s.is_current_cooling_site,", "s.readiness_status, s.candidate_status, "
                                           "s.identity_review_required, s.has_source_coordinate_conflict, "
                                           "s.is_indoor_inventory_listing, s.is_current_cooling_site,")
+        if document["name"] == "nearest_cooling_facilities":
+            statement = statement.replace("  facility_type, site_name,", "  facility_id, event_readiness_status, "
+                                          "coordinate_source_table, has_source_coordinate_conflict, facility_type, site_name,")
         document["statement"] = statement
         document["description"] = (
             "Uses validated enriched context and ACS2024 whole-tract estimates. The air-offset model is the frozen "
@@ -80,6 +84,59 @@ def build() -> list[dict]:
                 "Confirm event readiness before dispatching residents. Source periods include legacy schools "
                 "2013–2014, imported CPS 2025–2026 and cooling inventory Summer 2024.\n"
             )
+    event_date = {"name": "event_date", "type": "string",
+                  "description": "Explicit planning date in YYYY-MM-DD format; absent dates have no prepared snapshot."}
+    additions = [legacy.tool(
+        "get_event_weather",
+        "Forecast summaries for the explicit event date. Reports full-day/daytime/overnight coverage, missing hours "
+        "and source/reference freshness for six NWS grids. Incomplete-window highs/lows are null. "
+        "These are forecasts, not historical campaign observations. Zero rows means unavailable event data.",
+        f"SELECT *, TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), source_retrieved_at, SECOND) / 3600.0 AS source_age_now_hours,\n"
+        f" source_retrieved_at IS NULL OR TIMESTAMP_DIFF(CURRENT_TIMESTAMP(), source_retrieved_at, SECOND) > 21600 "
+        f"AS refresh_required_now\nFROM `{WORK}.event_weather_summary` WHERE event_date = DATE(@event_date) ORDER BY grid_key",
+        [event_date]),
+        legacy.tool(
+        "get_event_transit",
+        "Scheduled boardable CTA departures near a point for the explicit event clock date and hour window. "
+        "Includes prior service-date spillover and preserves schedule provenance. It does not establish a cooling "
+        "itinerary, live arrival, disruption status or wheelchair-accessible trip. Zero rows means no prepared matching schedule.",
+        f"SELECT d.event_date, d.actual_local_hour, d.stop_id, s.stop_name, d.route_id,\n"
+        f" SUM(d.scheduled_departures) AS scheduled_stop_departures, MIN(d.first_departure_utc) AS first_departure_utc,\n"
+        f" MAX(d.last_departure_utc) AS last_departure_utc, ANY_VALUE(d.data_kind) AS data_kind,\n"
+        f" ANY_VALUE(d.source_retrieved_at) AS source_retrieved_at, ANY_VALUE(s.wheelchair_boarding) AS source_wheelchair_boarding,\n"
+        f" ANY_VALUE(ST_DISTANCE(ST_GEOGPOINT(s.longitude, s.latitude), ST_GEOGPOINT(@longitude,@latitude))) AS straight_line_m\n"
+        f"FROM `{WORK}.event_transit_departures` d JOIN `{SOURCE}.transit_stops` s USING(stop_id)\n"
+        f"WHERE d.event_date = DATE(@event_date) AND d.actual_local_hour BETWEEN @start_hour AND @end_hour\n"
+        f" AND ST_DWITHIN(ST_GEOGPOINT(s.longitude, s.latitude), ST_GEOGPOINT(@longitude,@latitude), @radius_m)\n"
+        f"GROUP BY d.event_date, d.actual_local_hour, d.stop_id, s.stop_name, d.route_id\n"
+        f"ORDER BY straight_line_m, actual_local_hour, route_id LIMIT @limit",
+        [event_date, legacy.P_LAT, legacy.P_LON,
+         {"name": "start_hour", "type": "integer", "default": 12, "minValue": 0, "maxValue": 23,
+          "description": "First included event clock hour, Chicago local time."},
+         {"name": "end_hour", "type": "integer", "default": 18, "minValue": 0, "maxValue": 23,
+          "description": "Last included event clock hour, Chicago local time."},
+         {"name": "radius_m", "type": "integer", "default": 800, "minValue": 100, "maxValue": 5000,
+          "description": "Straight-line stop search radius in metres."}, legacy.p_limit(12, 50)]),
+        legacy.tool(
+        "get_cooling_readiness",
+        "Reports operator verification for an explicit event date and canonical facility. Source inventory "
+        "classification is separate from confirmed opening, AC, capacity, staffing and accessibility. "
+        "Nulls/unconfirmed values must not be represented as operational readiness.",
+        f"WITH ready AS (SELECT * FROM `{WORK}.facility_readiness` WHERE event_date=DATE(@event_date)\n"
+        f" QUALIFY ROW_NUMBER() OVER(PARTITION BY facility_id ORDER BY readiness_verified_at DESC, retrieved_at DESC)=1)\n"
+        f"SELECT f.facility_id,f.facility_name,f.address,f.candidate_status,f.indoor_cooling_classification,\n"
+        f" DATE(@event_date) AS event_date, COALESCE(r.readiness_status,'unconfirmed') AS readiness_status,\n"
+        f" r.open_for_event,r.working_ac_confirmed,r.available_capacity,r.staffing_confirmed,\n"
+        f" r.wheelchair_accessible_confirmed,r.verified_by,r.readiness_verified_at,r.verification_source\n"
+        f"FROM `{WORK}.canonical_facilities` f LEFT JOIN ready r USING(facility_id)\n"
+        f"WHERE @facility_id='any' OR f.facility_id=@facility_id ORDER BY facility_name,facility_id LIMIT @limit",
+        [event_date, {"name": "facility_id", "type": "string", "default": "any",
+                      "description": "Canonical facility ID from facility tools, or any for a sample."}, legacy.p_limit(5, 50)]),
+    ]
+    toolset = docs.pop()
+    docs.extend(additions)
+    toolset["tools"] += [doc["name"] for doc in additions]
+    docs.append(toolset)
     return docs
 
 

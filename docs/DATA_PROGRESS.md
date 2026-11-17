@@ -87,12 +87,67 @@ To prepare a separate local Toolbox server and connect the existing agent:
 # and TOOLBOX_TOOLSET=heat_dispatch_enriched for the agent process.
 ```
 
-## Priorities 4–6
+## Priority 4 — event-date data validated
 
-In progress. Regional routing acquisition and model/event preparation were
-prepared independently. Event-date validation initially
-uses November 17, 2026 unless the team specifies another planning date; this
-does not imply a heat event is occurring on that date.
+Prepared and published November 17, 2026 as a data-validation date, with
+append-only run histories and latest committed-run views. The outputs include
+`event_transit_departures`, `event_transit_validity`, `event_weather_hourly`,
+`event_weather_summary`, `event_data_validity` and their history tables.
+
+- 263,715 stop/route/hour aggregates represent 1,224,027 scheduled stop
+  departures. This is not a count of unique trips or passengers.
+- 5,218 aggregates belong to the prior GTFS service date but occur on the event
+  clock date. Conversion preserves UTC, Chicago local time and DST fold.
+- 102 forecast periods across six grids cover 11/24 civil-day hours and 9/16
+  daytime hours. Full-day/daytime highs remain null.
+- All six 22:00–06:00 overnight windows are complete; forecast lows are
+  40–43°F. The source reference time is 22:02:47 UTC, with snapshots about
+  2.54 hours old then. Queries report current freshness separately.
+- Historical runs remain recoverable. A latest validity record commits each
+  run; an empty refresh cannot expose stale rows from an earlier run.
+- The opt-in toolset adds event-weather, nearby scheduled transit and
+  operator-readiness queries. All **14 tool SQL queries** passed live BigQuery.
+
+Ten event-specific tests, seven write-guard tests and changed-file typechecks
+passed. See [event_data.md](sources/event_data.md).
+
+## Priority 5 — exploratory model comparison completed
+
+Two new models are in the working dataset: `heat_offset_candidate` and
+`heat_offset_candidate_lst`. `model_predictions` retains all 5,053 cells for
+each of seven comparisons, and `model_validation` contains seven metric rows.
+Candidates use 1,207 training cells and the same 442 held-out measured cells;
+demographics and population density are excluded from candidate inputs.
+
+| Model | Held-out RMSE °F | R² |
+|---|---:|---:|
+| Frozen original | 2.060 | 0.259 |
+| Frozen v2 | 1.870 | 0.389 |
+| Frozen v3 | 1.534 | 0.589 |
+| Frozen physical boosted tree | 1.592 | 0.557 |
+| New physical + NLCD candidate | 2.075 | 0.248 |
+| New physical + NLCD + quality-gated LST | 2.046 | 0.269 |
+| Predict zero offset | 2.406 | −0.011 |
+
+The new LST candidate's gain over the original is small. No model was promoted.
+The previously trained v2/v3 used 1,283 training cells, including low-observation
+cells excluded from candidate training, so they are historical comparisons with
+a cohort difference. All scores are exploratory because prior experiments reused
+this hold-out. Heat-only rank correlations/top-20 overlaps are recorded; these
+are distinct from vulnerability-weighted dispatch rankings.
+
+The campaign observation date remains unresolved. Source metadata creation and
+export timestamps are not substituted for it. Surface offsets remain predictors
+of an air-offset target, never values added directly to a forecast.
+Eight model tests, read-only preflight, complete prediction/label checks and
+typechecks passed. See [enriched_model.md](sources/enriched_model.md).
+
+## Priority 6
+
+In progress. Regional routing acquisition was prepared independently.
+Operator readiness remains unconfirmed; routes to listed indoor facilities
+will be labeled preliminary. Traffic-aware truck times require an appropriate
+provider and vehicle/depot assumptions.
 
 ## Reproduce priority 1
 
@@ -105,6 +160,10 @@ does not imply a heat event is occurring on that date.
 .venv/bin/python scripts/run_data_priorities.py facilities
 .venv/bin/python scripts/run_data_priorities.py context
 .venv/bin/python scripts/check_enriched_tools.py
+.venv/bin/python scripts/prepare_event_data.py --event-date 2026-11-17
+.venv/bin/python scripts/run_data_priorities.py event --event-date 2026-11-17
+.venv/bin/python scripts/evaluate_enriched_model.py --include-lst --execute
+# For an existing pair of candidate models, add --score-only to reevaluate.
 ```
 
 The runner writes only to a separate working dataset and records completed

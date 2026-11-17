@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
-.venv/
+.venv
 venv/
 env/
 *.egg-info/
@@ -28,7 +28,7 @@ Thumbs.db
 .env
 .data/
 # Enrichment snapshots: local only; the loaded tables live in BigQuery (docs/DATA_ENRICHMENT.md)
-data/enrichment/
+data/enrichment
 .pytest_cache/
 *.bak
 agent/heat_dispatch/.env
