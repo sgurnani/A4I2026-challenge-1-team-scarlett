@@ -48,3 +48,6 @@ ai_analyst_plus/
 # Repo-local gcloud config/credentials (CLOUDSDK_CONFIG); never commit
 .gcloud/
 
+
+# Local BigQuery exports (scripts/export_bigquery_local.sh); never commit data
+data/backup/
