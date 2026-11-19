@@ -1,7 +1,3 @@
-# Data scientist prep: round 2 pitch (8 min, judges)
-
-Every number below was checked against BigQuery, the repo or the original source on 2026-11-19, then challenged by an independent adversarial review whose key figures were re-run.
-
 ## Speaker notes to read: the ML model in plain words
 
 Presenter's version, with the two phrases that must change marked:
@@ -21,6 +17,25 @@ On neighbourhoods it never saw during training, it's typically within about one 
 Better data, a tested model, and an audited outcome, with the limits stated. That's what a dispatcher can act on.
 
 Why: "twice as accurate" is the r² ratio (2.3×); the error only fell ~25% (2.06 → 1.54 °F), and the ranking skill is weak (see the next section). "Trustworthy" invites the question you can't win.
+
+**What the speaker notes mean (if asked):**
+
+- **"One afternoon of data":** every street-level temperature comes from NOAA Heat Watch, volunteers driving sensors on one hot afternoon (48,855 readings). That is what the model learned from.
+- **"Can't tell one block from the next":** the model learned the city-wide pattern well (cool by the lake, warmer inland and to the southwest; several °F, seen in thousands of readings). Neighbouring blocks differ by about a degree or less, which is the size of the noise in one afternoon (clouds, time of the drive, sensor quirks). Held-out rank agreement within neighbourhoods is 0.08, close to none. Good neighbourhood-scale map, not a block-by-block ranking.
+- **"Heat is only half the score":** site score = (½ × heat percentile + ½ × vulnerability index) × access factor. The other half and the access boost come from more reliable data (Census, distance to cooling), so the model's block-level weakness can't decide a site on its own.
+- **"We audit who the plan reaches":** after sites are picked, the equity audit compares who lives in those tracts (income, poverty, 65+, no car, share in the most vulnerable tracts) with the city. Ranked by heat alone, no sites land in the most vulnerable tracts; with the blended score, half do, 4.3× the city rate.
+- **Short spoken version:** "One afternoon of data shows the big pattern, not block-by-block detail, so heat is only half the score, and we check who the plan actually reaches."
+
+**Who devised the site score, and how it is built:**
+
+- **We formulated it; it was not given.** The challenge README supplies the data and asks us to audit the outcome (rank sites, look up who lives there, compare to the city) but specifies no scoring formula. Ours was introduced in the original dispatch agent (commit `f896fb2`, Nov 17) and recorded as a design decision in `docs/ARCHITECTURE.md`.
+- **Formula:** priority = (heat_weight × heat percentile + (1 − heat_weight) × vulnerability index) × (0.6 + 0.4 × access gap).
+- **Heat term:** the model's predicted offset (°F hotter than the city average), turned into a citywide percentile.
+- **Vulnerability index:** equal-weight average of the percentile ranks of share 65+, households without a car, and poverty (`sql/02`); missing values set to the city median. Race is never loaded, as the README recommends. "Most vulnerable" = index ≥ 0.75, about 1 in 9 tracts (11.7%).
+- **heat_weight:** default 0.5 (balanced); the officer can change it in the console (vulnerable-first preset = 0.2) and the equity audit shows the effect immediately.
+- **Access factor:** 0.6 next to an indoor cooling site, rising linearly to 1.0 at 3 km or more, so a site far from cooling can score up to two thirds higher.
+- **Not fitted to data:** no outcome tuning, because there is no outcome data (heat deaths, EMS calls) to fit against. The weights are transparent policy choices.
+- **If asked "why those weights?":** "They're policy choices, not learned parameters. We have no outcome data to fit against, so we picked simple, explainable defaults: heat and vulnerability count equally, and distance to cooling can lift a site's score by up to two thirds. The officer can move the heat weight, and the equity audit shows the effect right away. That audit is how we learned that ranking by heat alone misses the most vulnerable tracts."
 
 ## The one thing to internalise first
 
@@ -177,3 +192,13 @@ Live `heat_offset_lst`, `ML.GLOBAL_EXPLAIN` (average size of each feature's effe
 ## 5. Ties to the demo
 
 In yesterday's recording the operator asks why one neighborhood is hotter than the Loop and the agent answers "lake ... surface trends". That answer **is** `ML.EXPLAIN_PREDICT` from the new model (lake band, location trend, surface heat): the city-scale pattern the model is good at. Point at it if a judge asks "where is the ML?"
+
+## 6. "Were the test areas contiguous?"
+
+- **No, not by design.** Each ~2.7 km square was held out or kept independently, by a pseudo-random hash of its grid position (`sql/01_grid_cells.sql`). Nothing forced the test squares together or apart.
+- **By chance they form patches.** 24 held-out areas (442 cells, 25% of the 97 measured areas). 19 of the 24 share an edge with another held-out area, giving 12 separate patches: one of 5 areas (99 cells, about 8 km across, South Side), two of 3, four of 2, and five single areas. That much clustering is normal at a 25% rate.
+- **Patches make the test slightly harder, not easier.** Cells in the middle of a patch are farther from any training data than cells in a lone square.
+- **Still gap-filling.** Every held-out area borders training areas on at least two sides (4.9 on average), so the model fills holes inside the driven area; it does not predict a new region.
+- **Evidence is thinner than "24" suggests.** Treat it as 24 areas in 12 independent patches, which supports "wide interval, sanity gate, not a significance test".
+- **Rogers Park,** the area behind most of the r² gain, is one of the isolated single squares at the far north.
+- **Spoken answer:** "No. Each 2.7 km square was held out at random, so they ended up as 24 areas in 12 separate patches, all surrounded by training areas. It's a fair test of filling gaps inside the city, not of predicting a new one, and with 12 patches we treat the result as a sanity check, not proof."
