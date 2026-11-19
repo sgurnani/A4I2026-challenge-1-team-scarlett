@@ -74,7 +74,8 @@ toolbox = build_toolbox_toolset(S)
 spatial_risk_agent = build_spatial_risk_agent(_model(), toolbox, guard_point_tools, stash_tool_results)
 logistics_agent = build_logistics_agent(_model(), toolbox, guard_point_tools, stash_tool_results)
 outreach_agent = build_outreach_agent(_model(), toolbox, guard_point_tools, stash_tool_results)
-triage_agent = build_triage_agent(_model(), toolbox, guard_point_tools, stash_tool_results)
+triage_agent = build_triage_agent(_model(), toolbox, guard_point_tools, stash_tool_results,
+                                  [set_operator_constraints, replan_dispatch])
 equity_agent = build_equity_agent(_model(), toolbox, guard_point_tools, stash_tool_results)
 _SPECIALISTS = [spatial_risk_agent, logistics_agent, outreach_agent, triage_agent, equity_agent]
 

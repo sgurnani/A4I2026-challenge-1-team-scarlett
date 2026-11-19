@@ -65,6 +65,48 @@ def render_map(m: dict) -> None:
     st.caption("  ·  ".join(f"● {v}" for v in LEGEND.values()))
 
 
+def render_tweet_card(tw, is_reply: bool = False) -> None:
+    badge_colors = {
+        "critical_alert": ("#fef2f2", "#991b1b", "🚨 CRITICAL ALERT"),
+        "vulnerability_dispatch": ("#eff6ff", "#1d4ed8", "🎯 TOP 2 VULNERABILITIES"),
+        "hydration_dispatch": ("#f0fdf4", "#166534", "🚛 HYDRATION TRUCK"),
+        "library_dispatch": ("#faf5ff", "#6b21a8", "❄️ COOLING CENTER"),
+        "wellness_dispatch": ("#fff7ed", "#9a3412", "💜 WELLNESS CANVASS"),
+    }
+    bg, fg, label = badge_colors.get(tw.category, ("#f1f5f9", "#334155", tw.category.upper()))
+    created = tw.created_at[11:19] if len(tw.created_at) >= 19 else tw.created_at
+    indent = "margin-left: 18px; border-left: 3px solid #94a3b8;" if is_reply else f"border-left: 4px solid {fg};"
+    reply_badge = "<div style='font-size: 10.5px; color: #64748b; margin-bottom: 3px;'>↳ Thread reply to @ChiHeatEmergency</div>" if is_reply else ""
+    st.markdown(
+        f"""
+        <div style="background-color: white; border: 1px solid #e2e8f0; {indent} border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 16px;">🏙️</span>
+              <div>
+                <span style="font-weight: 700; font-size: 13px; color: #0f1419;">Chicago OEMC</span>
+                <span style="color: #1da1f2; font-weight: bold; font-size: 12px;">✓</span>
+                <span style="font-size: 11px; color: #64748b; margin-left: 4px;">@ChiHeatEmergency · {created} UTC</span>
+              </div>
+            </div>
+            <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: {bg}; color: {fg};">{label}</span>
+          </div>
+          {reply_badge}
+          <div style="font-size: 13px; line-height: 1.45; color: #1e293b; margin-bottom: 8px;">
+            {tw.text}
+          </div>
+          <div style="font-size: 11px; color: #94a3b8; display: flex; gap: 14px; border-top: 1px solid #f8fafc; padding-top: 6px;">
+            <span>💬 Reply</span>
+            <span>🔁 18 Reposts</span>
+            <span>❤️ 74 Likes</span>
+            <span style="color: #10b981; font-weight: 600; margin-left: auto;">● Published to X</span>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def render_result(b: dict, key: str) -> None:
     """Draw the visual parts of a tool result: the dispatch map and sheet (download), or a compact table of rows."""
     r = b.get("response")
@@ -88,8 +130,20 @@ def render_result(b: dict, key: str) -> None:
                     from social_media.dispatch_updates import broadcast_dispatch_actions
                     b_res = broadcast_dispatch_actions(dispatch_plan=r)
                     st.success(f"Published {b_res['action_tweets_count']} update(s) to Twitter!")
+                    st.rerun()
                 except Exception as exc:
                     st.error(f"Failed to publish to Twitter: {exc}")
+
+            try:
+                from social_media.twitter import get_default_twitter_client
+                recent_tw = get_default_twitter_client().ledger.list_tweets(limit=6)
+                if recent_tw:
+                    st.markdown("---")
+                    st.markdown("**📱 Live Published Twitter Thread:**")
+                    for tw in recent_tw:
+                        render_tweet_card(tw, is_reply=bool(tw.in_reply_to_tweet_id))
+            except Exception:
+                pass
 
 
 def user_text(blocks: list[dict]) -> str:
@@ -170,23 +224,37 @@ with st.sidebar:
             st.markdown(n)
     st.divider()
     st.markdown("### 📢 Public Alerts & 311")
-    with st.expander("🐦 Twitter Alert Broadcast", expanded=False):
-        if st.button("🚨 Broadcast Critical Alert", key="btn_bc_alert", width="stretch"):
-            try:
-                from social_media.alerts import broadcast_critical_alert
-                alert_out = broadcast_critical_alert(forecast_high_f=float(forecast))
-                st.success(f"Broadcasted to Twitter! Root ID: {alert_out['root_tweet_id']}")
-            except Exception as exc:
-                st.error(f"Alert broadcast failed: {exc}")
+    with st.expander("🐦 Twitter Alert Broadcast", expanded=True):
+        col_b1, col_b2 = st.columns([1, 1])
+        with col_b1:
+            if st.button("🚨 Heat Alert", key="btn_bc_alert", width="stretch"):
+                try:
+                    from social_media.alerts import broadcast_critical_alert
+                    alert_out = broadcast_critical_alert(forecast_high_f=float(forecast))
+                    st.success(f"Broadcasted to Twitter! Root ID: {alert_out['root_tweet_id']}")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Alert broadcast failed: {exc}")
+        with col_b2:
+            if st.button("🧹 Clear Feed", key="btn_clr_feed", width="stretch"):
+                try:
+                    from social_media.twitter import get_default_twitter_client
+                    cli = get_default_twitter_client()
+                    cli.ledger._tweets = []
+                    cli.ledger._save()
+                    st.rerun()
+                except Exception:
+                    pass
+
         try:
             from social_media.twitter import get_default_twitter_client
-            tw_list = get_default_twitter_client().ledger.list_tweets(limit=4)
+            tw_list = get_default_twitter_client().ledger.list_tweets(limit=8)
             if tw_list:
+                st.caption(f"Showing {len(tw_list)} live broadcast(s):")
                 for tw in tw_list:
-                    st.caption(f"**{tw.category.upper()}** · `{tw.created_at[11:19]}`")
-                    st.markdown(f"> {tw.text}")
+                    render_tweet_card(tw, is_reply=bool(tw.in_reply_to_tweet_id))
             else:
-                st.caption("No tweets broadcast yet.")
+                st.caption("No tweets broadcast yet. Click 'Broadcast Actions' on a dispatch plan or 'Heat Alert' above.")
         except Exception:
             pass
 

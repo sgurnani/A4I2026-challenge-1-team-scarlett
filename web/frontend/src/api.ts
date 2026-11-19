@@ -17,9 +17,10 @@ export const api = {
   plan: () => j<Plan>('/api/plan'),
   replan: (body: { constraints?: Partial<Constraints>; day?: Day }) =>
     j<Plan>('/api/plan', { method: 'POST', body: JSON.stringify(body) }),
-  action: (action: 'approve' | 'unapprove' | 'approve_all' | 'skip', keys: string[] = [], kind?: string) =>
+  action: (action: 'approve' | 'unapprove' | 'approve_all' | 'skip' | 'reset', keys: string[] = [], kind?: string) =>
     j<Plan>('/api/actions', { method: 'POST', body: JSON.stringify({ action, keys, kind }) }),
   undo: () => j<Plan>('/api/undo', { method: 'POST' }),
+  reset: () => j<Plan>('/api/reset', { method: 'POST' }),
 
   /** POST /api/chat and yield server-sent events as they arrive. */
   async *chat(message: string, sessionId: string | null): AsyncGenerator<ChatEvent> {

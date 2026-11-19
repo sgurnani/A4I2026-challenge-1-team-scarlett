@@ -18,6 +18,7 @@ class Store(Protocol):
     async def save_version(self, row: dict) -> None: ...
     async def log_events(self, rows: list[dict]) -> None: ...
     async def latest(self) -> dict | None: ...
+    async def clear(self) -> None: ...
 
 
 class MemoryStore:
@@ -33,6 +34,10 @@ class MemoryStore:
 
     async def latest(self) -> dict | None:
         return json.loads(self.versions[-1]["payload"]) if self.versions else None
+
+    async def clear(self) -> None:
+        self.versions.clear()
+        self.events.clear()
 
 
 class BigQueryStore:
@@ -64,3 +69,14 @@ class BigQueryStore:
 
         rows = await asyncio.to_thread(run)
         return json.loads(rows[0]["payload"]) if rows else None
+
+    async def clear(self) -> None:
+        def run() -> None:
+            for table in (self.versions, self.approvals):
+                try:
+                    self.bq.query(f"TRUNCATE TABLE `{table}`").result()
+                except Exception:
+                    self.bq.query(f"DELETE FROM `{table}` WHERE TRUE").result()
+
+        await asyncio.to_thread(run)
+

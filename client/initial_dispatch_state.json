@@ -229,5 +229,15 @@
     "equity_elderly_multiplier": 1.57,
     "equity_vulnerability_multiplier": 1.47,
     "equity_top_quartile_pct": 100.0
-  }
+  },
+  "social_media_preview": [
+    "\ud83c\udfaf TOP 2 VULNERABILITIES IDENTIFIED: 1. Elderly seniors (65+) living without AC 2. Transit-dependent households without vehicles City resources dispatched to mitigate these priority risks. #ChiHeatAlert #EquityInAction",
+    "\ud83d\ude9b Action: Hydration Truck #1 deployed to North Lawndale (41.8575, -87.7380)",
+    "\ud83d\ude9b Action: Hydration Truck #2 deployed to East Garfield Park (41.8875, -87.6940)",
+    "\ud83d\ude9b Action: Hydration Truck #3 deployed to Chatham (41.7375, -87.6260)",
+    "\u2744\ufe0f Relief: Extended hours at Toman (2708 S. Pulaski Road)",
+    "\u2744\ufe0f Relief: Extended hours at Daley, Richard M.-W Humboldt (733 N. Kedzie Avenue)",
+    "\u2744\ufe0f Relief: Extended hours at Whitney M. Young, Jr. (415 E. 79th Street)",
+    "\ud83d\udc9c Outreach: 4 wellness teams active in priority neighborhoods"
+  ]
 }

@@ -212,3 +212,25 @@ def test_toolbox_failure_is_a_503_not_a_crash():
                               days_provider=days))
     r = c.get("/api/plan")
     assert r.status_code == 503 and ("Toolbox" in r.json()["detail"] or "heat model" in r.json()["detail"])
+
+
+def test_reset_clears_store_and_restores_baseline_plan():
+    c, _, store, _ = make()
+    c.get("/api/plan")
+    c.post("/api/actions", json={"action": "approve_all"})
+    c.post("/api/plan", json={"constraints": {"trucks": 8}})
+    assert len(store.versions) >= 2
+    assert len(store.events) > 0
+    p2 = c.get("/api/plan").json()
+    assert p2["version"] == 2
+    assert len(p2["approved"]) > 0
+
+    r = c.post("/api/reset")
+    assert r.status_code == 200
+    res = r.json()
+    assert res["version"] == 1
+    assert res["approved"] == {}
+    assert res["can_undo"] is False
+    assert len(store.versions) == 1
+    assert len(store.events) == 0
+

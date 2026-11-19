@@ -154,4 +154,86 @@ describe('Heat Dispatch Console', () => {
     fireEvent.change(slider, { target: { value: '5' } });
     await waitFor(() => expect(calls.find(c => c.path === 'POST /api/plan')?.body).toEqual({ constraints: { trucks: 5 } }), { timeout: 2000 });
   });
+
+  it('approve button in chat diff approves only the changed keys in the diff, not the whole plan', async () => {
+    const newItem = item('truck', 3);
+    const v2 = makePlan(2, [...v1Items, newItem], {
+      source: 'chat',
+      changes: ['trucks: 3 -> 4'],
+      diff: { truck: { added: [{ key: newItem.key, name: newItem.name }], removed: [] } },
+    });
+    routes['POST /api/chat'] = () => sse([
+      { type: 'session', session_id: 's1' },
+      { type: 'text', text: 'Added 1 truck.' },
+      { type: 'plan', plan: v2 },
+      { type: 'done' },
+    ]);
+    routes['POST /api/actions'] = body => {
+      expect(body).toEqual({ action: 'approve', keys: [newItem.key] });
+      return {
+        ...v2,
+        approved: {
+          [newItem.key]: { by: 'duty@city.gov', at: '2026-07-13T14:10:00Z', plan_version: 2, kind: 'truck', name: newItem.name },
+        },
+      };
+    };
+
+    await boot();
+    await userEvent.type(screen.getByLabelText('message'), 'add 1 truck{enter}');
+    const diff = await screen.findByTestId('plan-diff');
+    expect(diff).toHaveTextContent('+ 🚚 Hoodtruck3');
+    const approveBtn = within(diff).getByRole('button', { name: /approve changes/i });
+    await userEvent.click(approveBtn);
+
+    const actionCall = calls.find(c => c.path === 'POST /api/actions');
+    expect(actionCall).toBeDefined();
+    expect(actionCall?.body).toEqual({ action: 'approve', keys: [newItem.key] });
+  });
+
+  it('reset demo button clears database and restores baseline plan v1', async () => {
+    routes['POST /api/reset'] = () => makePlan(1, v1Items, { source: 'reset' });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    await boot();
+    const resetBtn = screen.getByRole('button', { name: /reset demo/i });
+    await userEvent.click(resetBtn);
+    await waitFor(() => expect(calls.some(c => c.path === 'POST /api/reset')).toBe(true));
+  });
+
+  it('reset chat command calls /api/reset and posts confirmation', async () => {
+    routes['POST /api/reset'] = () => makePlan(1, v1Items, { source: 'reset' });
+    await boot();
+    await userEvent.type(screen.getByLabelText('message'), 'reset demo{enter}');
+    await waitFor(() => expect(calls.some(c => c.path === 'POST /api/reset')).toBe(true));
+    expect(screen.getByTestId('chat-msgs')).toHaveTextContent('Database reset complete');
+  });
+
+  it('shows X icon on approval and clicking it displays vulnerability and dispatch on way, closes on click outside', async () => {
+    const approvedItem = { ...v1Items[0], approval: { by: 'duty@city.gov', at: '2026-07-13T14:05:00Z', plan_version: 1, kind: v1Items[0].kind, name: v1Items[0].name } };
+    routes['POST /api/actions'] = () => makePlan(1, [approvedItem, ...v1Items.slice(1)]);
+    await boot();
+
+    // Click Approve on the first item
+    const firstItem = screen.getByTestId(`item-${v1Items[0].key}`);
+    const apBtn = within(firstItem).getByText('✓ Approve');
+    await userEvent.click(apBtn);
+
+    // The X button should now populate at the end of the approval section
+    const xBtn = await screen.findByTestId(`x-btn-${v1Items[0].key}`);
+    expect(xBtn).toBeInTheDocument();
+
+    // Click the X button to open the message
+    await userEvent.click(xBtn);
+
+    // The message card appears with vulnerability and dispatch on the way
+    const modal = await screen.findByTestId('x-modal-card');
+    expect(modal).toBeInTheDocument();
+    expect(screen.getByTestId('x-vuln-banner')).toHaveTextContent(/Identified Vulnerability/i);
+    expect(screen.getByTestId('x-dispatch-banner')).toHaveTextContent(/Dispatch On The Way/i);
+    expect(screen.getByTestId('x-tweet-text')).toHaveTextContent(/🚨 HEAT DISPATCH UPDATE/);
+
+    // Clicking outside (on the backdrop) closes the modal
+    const backdrop = screen.getByTestId('x-modal-backdrop');
+    await userEvent.click(backdrop);
+    expect(screen.queryByTestId('x-modal-card')).not.toBeInTheDocument();
+  });
 });

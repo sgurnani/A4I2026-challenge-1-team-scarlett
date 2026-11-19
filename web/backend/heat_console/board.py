@@ -199,6 +199,15 @@ class Board:
             await self.store.log_events(ev)
             return self.state
 
+    async def reset(self, actor: str, default_day: dict | None = None) -> dict:
+        async with self.lock:
+            await self.store.clear()
+            self.state = None
+            self.history.clear()
+            self._ranks.clear()
+            await self._replan(actor, "reset", constraints=dict(planner.DEFAULT_CONSTRAINTS), day=default_day)
+            return self.view()
+
     # ------------------------------------------------------------------------------------------ chat
     def context(self, turn_id: str) -> dict:
         """What the agent needs in session state to re-plan from exactly this board."""

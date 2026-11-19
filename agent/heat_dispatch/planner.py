@@ -253,9 +253,14 @@ def enforce_capacity(constraints: dict, approved: dict, candidates_by_kind: dict
         for k, why in gone:
             keep.pop(k, None)
         if gone:
+            def _item_label(k: str, w: str) -> str:
+                nm = (approved.get(k) or {}).get("name") or _name(k)
+                return f"{nm} ({w})" if w != "no longer qualifies" else nm
+
+            labels = [_item_label(k, w) for k, w in gone]
+            summary_str = ", ".join(labels[:3]) + (f", and {len(labels) - 3} more" if len(labels) > 3 else "")
             warnings.append({"kind": kind, "reason": "ineligible", "unapproved": [k for k, _ in gone],
-                             "message": f"Un-approved {len(gone)} {LABEL[kind]} item(s) that no longer qualify: "
-                                        + ", ".join(f"{_name(k)} ({w})" for k, w in gone)})
+                             "message": f"Un-approved {len(gone)} {LABEL[kind]} item(s) that no longer qualify: {summary_str}"})
         mine = [k for k in keep if k.startswith(kind + ":")]
         cap = c[RESOURCE_OF[kind]]
         if len(mine) > cap:
@@ -263,10 +268,11 @@ def enforce_capacity(constraints: dict, approved: dict, candidates_by_kind: dict
             drop = mine[cap:]
             for k in drop:
                 keep.pop(k, None)
+            drop_labels = [(approved.get(k) or {}).get("name") or cands.get(k, {}).get("name") or _name(k) for k in drop]
+            drop_str = ", ".join(drop_labels[:3]) + (f", and {len(drop_labels) - 3} more" if len(drop_labels) > 3 else "")
             warnings.append({"kind": kind, "reason": "capacity", "unapproved": drop,
                              "message": f"You had approved {len(mine)} {LABEL[kind]} item(s) but only {cap} are "
-                                        f"available. Un-approved the {len(drop)} lowest-priority: "
-                                        + ", ".join(cands.get(k, {}).get("name") or _name(k) for k in drop)})
+                                        f"available. Un-approved the {len(drop)} lowest-priority: {drop_str}"})
     return keep, warnings
 
 

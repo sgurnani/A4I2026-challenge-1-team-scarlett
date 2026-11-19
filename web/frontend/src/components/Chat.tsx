@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { marked } from 'marked';
 import { EMOJI } from '../lenses';
 import type { Kind, Plan } from '../types';
+
+marked.use({ gfm: true, breaks: true });
 
 export interface Msg { who: 'u' | 'a'; text: string; plan?: Plan; pending?: string; error?: boolean; qr?: string[] }
 
@@ -10,8 +13,17 @@ const TRIAGE_EVENTS = [
   { label: '🚨 Transit Heat Distress', prompt: 'Midday Emergency Alert (311 Incident #311-HEAT-403): Multiple 311 calls reporting heat exhaustion at unshaded transit corridor Pulaski & Madison in East Garfield Park. Recommend immediate dispatch rerouting.' },
 ];
 
-export function DiffView({ plan, onSend }: { plan: Plan; onSend?: (t: string) => void }) {
+export function DiffView({ plan, onSend, onApproveDiff }: {
+  plan: Plan;
+  onSend?: (t: string) => void;
+  onApproveDiff?: (keys: string[], names?: string[]) => void;
+}) {
   const lines: { color: string; text: string }[] = [];
+  const diffAdded = (['truck', 'well', 'lib'] as Kind[]).flatMap(k => plan.diff?.[k]?.added || []);
+  const diffKeys = diffAdded.map(x => x.key);
+  const diffNames = diffAdded.map(x => x.name);
+  const unapprovedKeys = diffKeys.filter(k => !plan.approved?.[k]);
+
   for (const k of ['truck', 'well', 'lib'] as Kind[]) {
     const d = plan.diff?.[k]; if (!d) continue;
     const list = (a: { name: string }[]) => a.slice(0, 5).map(x => x.name).join(', ') + (a.length > 5 ? ` +${a.length - 5} more` : '');
@@ -25,25 +37,56 @@ export function DiffView({ plan, onSend }: { plan: Plan; onSend?: (t: string) =>
         <span style={{ fontSize: '11px', color: '#57609a' }}>v{plan.version}</span>
       </div>
       <div className="note">Re-planned → <b>v{plan.version}</b>{plan.changes?.length ? ` · ${plan.changes.join(' · ')}` : ''}</div>
-      {plan.warnings?.map((w, i) => <div key={`w${i}`} style={{ color: '#7a5a00', fontWeight: 500 }}>⚠︎ {w.message}</div>)}
+      {plan.warnings && plan.warnings.length > 0 && (
+        plan.warnings.length === 1 ? (
+          <div style={{ color: '#7a5a00', fontWeight: 500, fontSize: '11.5px', marginTop: 3 }}>⚠︎ {plan.warnings[0].message}</div>
+        ) : (
+          <details style={{ color: '#7a5a00', fontSize: '11.5px', marginTop: 3, cursor: 'pointer' }}>
+            <summary style={{ fontWeight: 600 }}>⚠︎ {plan.warnings.reduce((sum, w) => sum + (w.unapproved?.length || 1), 0)} approved items un-approved under updated plan</summary>
+            <div style={{ paddingLeft: 8, marginTop: 2 }}>
+              {plan.warnings.map((w, i) => <div key={`w${i}`}>• {w.message}</div>)}
+            </div>
+          </details>
+        )
+      )}
       {lines.length ? lines.map((l, i) => <div key={i} style={{ color: l.color, fontWeight: 500 }}>{l.text}</div>) : <div className="note">No sites changed.</div>}
-      {onSend && (
+      {(onApproveDiff || onSend) && (
         <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-          <button type="button" onClick={() => onSend('approve all')} style={{ background: '#13803f', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 9px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}>
-            ✓ Approve Plan v{plan.version}
-          </button>
-          <button type="button" onClick={() => onSend('undo')} style={{ background: '#fff', color: '#57609a', border: '1px solid #d0d7de', borderRadius: '6px', padding: '4px 9px', fontSize: '11px', cursor: 'pointer' }}>
-            ↺ Undo
-          </button>
+          {diffKeys.length === 0 ? (
+            <button type="button" disabled style={{ background: '#e9ecef', color: '#6c757d', border: '1px solid #ced4da', borderRadius: '6px', padding: '4px 9px', fontSize: '11px', fontWeight: 600, cursor: 'default' }}>
+              No added sites to approve
+            </button>
+          ) : unapprovedKeys.length === 0 ? (
+            <button type="button" disabled style={{ background: '#eef8f2', color: '#13803f', border: '1px solid #7fe0a3', borderRadius: '6px', padding: '4px 9px', fontSize: '11px', fontWeight: 600 }}>
+              ✓ Diff approved
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (onApproveDiff) onApproveDiff(diffKeys, diffNames);
+                else onSend?.('approve changes');
+              }}
+              style={{ background: '#13803f', color: '#fff', border: 'none', borderRadius: '6px', padding: '4px 9px', fontSize: '11px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              ✓ Approve changes ({diffKeys.length})
+            </button>
+          )}
+          {onSend && (
+            <button type="button" onClick={() => onSend('undo')} style={{ background: '#fff', color: '#57609a', border: '1px solid #d0d7de', borderRadius: '6px', padding: '4px 9px', fontSize: '11px', cursor: 'pointer' }}>
+              ↺ Undo
+            </button>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-export function Chat({ msgs, onSend, suggestions, busy, agentLabel, onToggleChat }: {
+export function Chat({ msgs, onSend, suggestions, busy, agentLabel, onToggleChat, onApproveDiff }: {
   msgs: Msg[]; onSend: (t: string) => void; suggestions: string[]; busy: boolean; agentLabel: string;
   onToggleChat?: () => void;
+  onApproveDiff?: (keys: string[], names?: string[]) => void;
 }) {
   const [text, setText] = useState('');
   const [showTriage, setShowTriage] = useState(false);
@@ -78,9 +121,15 @@ export function Chat({ msgs, onSend, suggestions, busy, agentLabel, onToggleChat
       <div className="msgs" ref={box} data-testid="chat-msgs">
         {msgs.map((m, i) => (
           <div key={i} className={`msg ${m.who}${m.error ? ' err' : ''}`}>
-            {m.text && <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>}
+            {m.text && (
+              m.who === 'a' ? (
+                <div className="chat-md" dangerouslySetInnerHTML={{ __html: marked.parse(m.text) as string }} />
+              ) : (
+                <div style={{ whiteSpace: 'pre-wrap' }}>{m.text}</div>
+              )
+            )}
             {m.pending && <div className="note">{m.pending}</div>}
-            {m.plan && <DiffView plan={m.plan} onSend={onSend} />}
+            {m.plan && <DiffView plan={m.plan} onSend={onSend} onApproveDiff={onApproveDiff} />}
             {m.qr && <div className="qr">{m.qr.map(q => <button key={q} disabled={busy} onClick={() => onSend(q)}>{q}</button>)}</div>}
           </div>
         ))}

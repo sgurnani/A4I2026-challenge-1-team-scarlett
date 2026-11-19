@@ -7,9 +7,9 @@ import { RecPanel, type Tab } from './components/RecPanel';
 import { Strip } from './components/Strip';
 import { pct } from './format';
 import type { LensKey, SiteLayer } from './lenses';
-import type { Constraints, Day, Layers, Plan } from './types';
+import type { Constraints, Day, Kind, Layers, Plan } from './types';
 
-const QR_AFTER_REPLAN = ['undo', 'How many people are covered?', 'approve all'];
+const QR_AFTER_REPLAN = ['undo', 'approve changes', 'How many people are covered?'];
 
 export default function App() {
   const [plan, setPlan] = useState<Plan | null>(null);
@@ -65,7 +65,23 @@ export default function App() {
       if (action === 'approve_all') flash('All shown recommendations approved');
     });
 
-  const onConstraints = (c: Partial<Constraints>) => run(() => api.replan({ constraints: c }), warnInChat);
+  const onConstraints = (c: Partial<Constraints>) =>
+    run(() => api.replan({ constraints: c }), p => {
+      const parts: string[] = [];
+      if (c.trucks !== undefined) parts.push(`${c.trucks} trucks`);
+      if (c.wellness_teams !== undefined) parts.push(`${c.wellness_teams} wellness teams`);
+      if (c.libraries !== undefined) parts.push(`${c.libraries} libraries`);
+      if (c.cutoff_f !== undefined) parts.push(`+${c.cutoff_f}°F cutoff`);
+      if (c.ranking !== undefined) parts.push(`${c.ranking} ranking`);
+
+      const changeDesc = parts.length ? parts.join(', ') : 'constraints';
+      say({
+        who: 'a',
+        text: `Operator updated ${changeDesc}. Plan recomputed to v${p.version}: ${p.summary?.counts.truck ?? 0} trucks, ${p.summary?.counts.well ?? 0} canvass teams, reaching ${pct(p.summary?.share_of_hot_65_plus_reached)} of seniors in hot tracts.`,
+        plan: p.warnings.length ? p : undefined,
+        qr: QR_AFTER_REPLAN,
+      });
+    });
   const onDay = (d: Day) => run(() => api.replan({ day: d }), warnInChat);
 
   const onToggleMode = async (m: 'historic' | 'current') => {
@@ -84,11 +100,51 @@ export default function App() {
     }
   };
 
+  const approveDiff = (keys: string[], itemNames?: string[]) => {
+    const currentItemKeys = new Set(plan?.items.map(i => i.key) || []);
+    const validKeys = keys.filter(k => currentItemKeys.has(k));
+    if (!validKeys.length) {
+      flash('No new sites in diff to approve');
+      return;
+    }
+    run(() => api.action('approve', validKeys), () => {
+      flash(`Approved ${validKeys.length} changed site${validKeys.length > 1 ? 's' : ''}`);
+      say({
+        who: 'a',
+        text: `✓ Approved ${validKeys.length} changed site${validKeys.length > 1 ? 's' : ''} from diff${itemNames?.length ? `: ${itemNames.join(', ')}` : ''}.`,
+      });
+    });
+  };
+
+  const onResetAll = () => {
+    if (!window.confirm('Reset all demo state? This will clear all persisted approvals, plan versions, and database records so judges can start fresh.')) {
+      return;
+    }
+    run(() => api.reset(), p => {
+      session.current = null;
+      setMsgs([{ who: 'a', text: `Morning. Here's plan v${p.version} for ${p.day.weekday} ${p.day.date || ''} (${p.day.label || ''}) (${p.day.high_f}°F): ${p.summary?.counts.well ?? 8} wellness teams, ${p.summary?.counts.truck ?? 5} trucks, ${p.summary?.counts.lib ?? 6} libraries with extended hours, reaching ${pct(p.summary?.share_of_hot_65_plus_reached)} of residents 65+ in hot tracts. Approve what looks right; tell me what changed.` }]);
+      flash('Demo database reset to clean baseline plan (v1)');
+    });
+  };
+
   const send = async (raw: string) => {
     const text = raw.trim(); if (!text) return;
     say({ who: 'u', text });
     if (/^(undo|revert|go back)\b/i.test(text)) {
       return run(() => api.undo(), p => say({ who: 'a', text: `Reverted to the previous plan (now v${p.version}).` }));
+    }
+    if (/^(reset( all| demo)?|clear( all| database)?|fresh start)\b/i.test(text)) {
+      return run(() => api.reset(), p => {
+        session.current = null;
+        say({ who: 'a', text: `🔄 Database reset complete! All persisted plan versions and approvals have been wiped clean. Reset to baseline Plan v${p.version} (102°F Peak Alert).` });
+        flash('Database reset to clean baseline plan (v1)');
+      });
+    }
+    if (/^approve (changes|diff)\b/i.test(text)) {
+      const diffAdded = (['truck', 'well', 'lib'] as Kind[]).flatMap(k => plan?.diff?.[k]?.added || []);
+      const diffKeys = diffAdded.map(x => x.key);
+      const diffNames = diffAdded.map(x => x.name);
+      return approveDiff(diffKeys, diffNames);
     }
     if (/^approve all\b/i.test(text)) {
       return run(() => api.action('approve_all'), p => say({ who: 'a', text: `Approved everything. ${p.items.filter(i => i.approval).length} of ${p.items.length} now approved.` }));
@@ -123,9 +179,9 @@ export default function App() {
 
   const gridStyle = useMemo(() => {
     if (!showLeft && !showRight) return { gridTemplateColumns: '1fr' };
-    if (!showLeft) return { gridTemplateColumns: '1fr 440px' };
-    if (!showRight) return { gridTemplateColumns: '290px 1fr' };
-    return { gridTemplateColumns: '290px 1fr 440px' };
+    if (!showLeft) return { gridTemplateColumns: '1fr var(--right-w, 420px)' };
+    if (!showRight) return { gridTemplateColumns: 'var(--left-w, 280px) 1fr' };
+    return { gridTemplateColumns: 'var(--left-w, 280px) 1fr var(--right-w, 420px)' };
   }, [showLeft, showRight]);
 
   const viewToggles = useMemo(() => ({
@@ -200,6 +256,16 @@ export default function App() {
           <button
             type="button"
             className="btn ghost"
+            title="Clear all persisted approvals, plan versions, and database records so judges can start fresh"
+            style={{ padding: '3px 9px', fontSize: '11.5px', background: 'rgba(255,255,255,0.08)', color: '#ffd280', border: '1px solid rgba(255,210,128,0.3)', cursor: 'pointer' }}
+            onClick={onResetAll}
+            disabled={busy}
+          >
+            🔄 Reset Demo / DB
+          </button>
+          <button
+            type="button"
+            className="btn ghost"
             style={{ padding: '3px 9px', fontSize: '11.5px', background: 'rgba(255,255,255,0.1)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)' }}
             onClick={() => setShowReliability(true)}
           >
@@ -223,6 +289,7 @@ export default function App() {
             mode={mode}
             onToggleMode={onToggleMode}
             onScenario={send}
+            layers={layers}
           />
         )}
         <main className="center">
@@ -231,7 +298,7 @@ export default function App() {
         </main>
         {showRight && (
           <RecPanel plan={plan} tab={tab} setTab={setTab} selected={selected} onPick={setSelected} onAct={onAct} busy={busy} showChat={showChat} onToggleChat={() => setShowChat(v => !v)}>
-            <Chat msgs={msgs} onSend={send} suggestions={suggestions} busy={busy} agentLabel={agentLabel} onToggleChat={() => setShowChat(false)} />
+            <Chat msgs={msgs} onSend={send} suggestions={suggestions} busy={busy} agentLabel={agentLabel} onToggleChat={() => setShowChat(false)} onApproveDiff={approveDiff} />
           </RecPanel>
         )}
       </div>

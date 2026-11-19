@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { sgn } from '../format';
-import { LENSES, SITE_LAYERS, type LensKey, type SiteLayer } from '../lenses';
-import type { Constraints, Day, Plan } from '../types';
+import { LENSES, SITE_LAYERS, siteLayer, type LensKey, type SiteLayer } from '../lenses';
+import type { Constraints, Day, Layers, Plan } from '../types';
 
 const RANK: { k: Constraints['ranking']; t: string }[] = [
   { k: 'balanced', t: 'Heat + vulnerability' }, { k: 'vulnerable', t: 'Vulnerable first' }, { k: 'heat', t: 'Heat only' },
@@ -19,6 +19,7 @@ export function LeftPanel({
   mode = 'historic',
   onToggleMode,
   onScenario,
+  layers,
 }: {
   plan: Plan | null;
   days: Day[];
@@ -31,6 +32,7 @@ export function LeftPanel({
   mode?: 'historic' | 'current';
   onToggleMode?: (m: 'historic' | 'current') => void;
   onScenario?: (prompt: string) => void;
+  layers?: Layers | null;
 }) {
   const c = plan?.constraints;
   const [draft, setDraft] = useState<Partial<Constraints>>({});
@@ -45,6 +47,15 @@ export function LeftPanel({
   const [hiDraft, setHiDraft] = useState('');
   const cur = plan?.day;
   const hi = cur?.high_f;
+
+  const siteCounts = useMemo(() => {
+    const counts: Record<SiteLayer, number> = { lib: 0, police: 0, csc: 0, park: 0, senior: 0, college: 0, spray: 0, cps: 0 };
+    for (const s of layers?.sites ?? []) {
+      const L = siteLayer(s.site_category);
+      if (L) counts[L] = (counts[L] || 0) + 1;
+    }
+    return counts;
+  }, [layers?.sites]);
 
   return (
     <aside className="panel">
@@ -123,15 +134,31 @@ export function LeftPanel({
         </form>
       </div>
 
-      {/* Resources Today */}
+      {/* Resources & Ranking Goal */}
       <details className="box" open>
-        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Resources Today</summary>
+        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Resources &amp; Ranking Goal</summary>
         <div className="res" style={{ marginTop: 8 }}>
           {([['trucks', '🚚', 'trucks'], ['wellness_teams', '🩺', 'wellness teams'], ['libraries', '📚', 'libraries']] as const).map(([k, e, label]) => (
             <ResRow key={k} emoji={e} label={label} max={plan?.limits?.[k] ?? 25} value={(val(k) as number) ?? 0} onChange={v => setDraft({ ...draft, [k]: v })} />
           ))}
         </div>
-        <div className="note" style={{ marginTop: 4 }}>Mobile hydration trucks · Senior canvass teams · Extended library cooling</div>
+        <div className="kicker" style={{ margin: '10px 0 4px' }}>Rank Priority By</div>
+        <div className="seg2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>{RANK.map(r => (
+          <button key={r.k} className={val('ranking') === r.k ? 'on' : ''} onClick={() => onConstraints({ ranking: r.k })}>{r.t}</button>))}</div>
+        <div className="note" style={{ marginTop: 6 }}>Mobile hydration trucks · Senior canvass teams · Extended library cooling</div>
+      </details>
+
+      {/* Collapsible Model Rules & Cutoff */}
+      <details className="box">
+        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Model Cutoff &amp; Closed Sites</summary>
+        <div className="slider" style={{ marginTop: 8 }}><div className="row"><span>Hot: modelled offset at least</span><b>{sgn((val('cutoff_f') as number) ?? 0, 2)}</b></div>
+          <input type="range" aria-label="hot cutoff" min={-1} max={2.5} step={0.25} value={(val('cutoff_f') as number) ?? 0} onChange={e => setDraft({ ...draft, cutoff_f: +e.target.value })} /></div>
+        <div className="note" style={{ margin: '-2px 0 6px' }}>°F vs city average (BigQuery ML physical microclimate offset model)</div>
+        {!!c?.closed_sites.length && <>
+          <div className="kicker" style={{ margin: '10px 0 2px' }}>Closed today</div>
+          <div className="closed">{c.closed_sites.map(s => (
+            <button key={s} title="Reopen" onClick={() => onConstraints({ closed_sites: c.closed_sites.filter(x => x !== s) })}>{s} ×</button>))}</div>
+        </>}
       </details>
 
       {/* Collapsible Map Lenses */}
@@ -145,28 +172,25 @@ export function LeftPanel({
 
       {/* Collapsible City Facilities */}
       <details className="box">
-        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>City Facilities (Cooling Centers)</summary>
-        <div className="layers" style={{ marginTop: 8 }}>{SITE_LAYERS.map(l => (
-          <label key={l.k}><input type="checkbox" checked={siteLayers[l.k]} onChange={e => setSiteLayers({ ...siteLayers, [l.k]: e.target.checked })} />
-            <span className="ico" style={{ background: l.color, borderRadius: 3 }} />{l.n}</label>))}
-          <span className="note" style={{ marginTop: 3 }}>*CPS high schools and City Colleges can be designated as emergency cooling relief.</span>
+        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Fixed Cooling Centers (City Assets)</summary>
+        <div style={{ fontSize: 11, color: '#666', margin: '4px 0 8px', lineHeight: 1.35 }}>
+          Existing indoor A/C shelters &amp; splash pads. Toggle these on the map to spot cooling deserts that need mobile hydration trucks or senior canvassing.
         </div>
-      </details>
-
-      {/* Collapsible Model Rules */}
-      <details className="box">
-        <summary style={{ fontWeight: 600, cursor: 'pointer' }}>Model Rules &amp; Ranking</summary>
-        <div className="slider" style={{ marginTop: 8 }}><div className="row"><span>Hot: modelled offset at least</span><b>{sgn((val('cutoff_f') as number) ?? 0, 2)}</b></div>
-          <input type="range" aria-label="hot cutoff" min={-1} max={2.5} step={0.25} value={(val('cutoff_f') as number) ?? 0} onChange={e => setDraft({ ...draft, cutoff_f: +e.target.value })} /></div>
-        <div className="note" style={{ margin: '-2px 0 6px' }}>°F vs city average (BigQuery ML physical microclimate offset model)</div>
-        <div className="kicker" style={{ margin: '6px 0 4px' }}>Rank by</div>
-        <div className="seg2" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>{RANK.map(r => (
-          <button key={r.k} className={val('ranking') === r.k ? 'on' : ''} onClick={() => onConstraints({ ranking: r.k })}>{r.t}</button>))}</div>
-        {!!c?.closed_sites.length && <>
-          <div className="kicker" style={{ margin: '10px 0 2px' }}>Closed today</div>
-          <div className="closed">{c.closed_sites.map(s => (
-            <button key={s} title="Reopen" onClick={() => onConstraints({ closed_sites: c.closed_sites.filter(x => x !== s) })}>{s} ×</button>))}</div>
-        </>}
+        <div className="layers" style={{ marginTop: 6 }}>
+          {SITE_LAYERS.map(l => (
+            <label key={l.k} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '2px 0' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <input type="checkbox" checked={siteLayers[l.k]} onChange={e => setSiteLayers({ ...siteLayers, [l.k]: e.target.checked })} />
+                <span className="ico" style={{ background: l.color, borderRadius: 3, flexShrink: 0 }} />
+                <span>{l.n}</span>
+              </span>
+              {siteCounts[l.k] > 0 && <small style={{ color: '#888', fontWeight: 600 }}>({siteCounts[l.k]})</small>}
+            </label>
+          ))}
+          <span className="note" style={{ marginTop: 6, lineHeight: 1.35 }}>
+            *CPS high schools &amp; City Colleges can be designated as emergency mass cooling shelters.
+          </span>
+        </div>
       </details>
     </aside>
   );

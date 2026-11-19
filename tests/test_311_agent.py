@@ -101,13 +101,13 @@ def test_log_311_heat_call_and_vulnerability_identification():
     assert "senior_no_ac" in categories or "no_vehicle" in categories
 
 
-def test_311_call_intake_produces_zero_tweets():
+def test_311_call_intake_produces_zero_tweets(tmp_path):
     """Verify that incoming 311 calls are pure vulnerability ingestion and NEVER trigger Twitter posts."""
     from social_media.call_311 import find_cooling_for_caller, intake_wellness_check, log_311_heat_call
     from social_media.twitter import TwitterClient, TwitterLedger
 
     # Setup isolated client with empty ledger
-    ledger = TwitterLedger()
+    ledger = TwitterLedger(storage_path=tmp_path / "test_social_feed.json")
     client = TwitterClient(ledger=ledger)
 
     initial_tweet_count = len(ledger.list_tweets())

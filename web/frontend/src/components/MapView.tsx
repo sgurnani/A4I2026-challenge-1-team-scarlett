@@ -12,15 +12,15 @@ interface Tip { x: number; y: number; body: ReactNode }
 
 function SiteShape({ k, x, y, s }: { k: SiteLayer; x: number; y: number; s: number }) {
   const c = SITE_LAYERS.find(l => l.k === k)!.color;
-  const st = { stroke: '#fff', strokeWidth: s * 0.3 };
+  const st = { stroke: '#fff', strokeWidth: s * 0.28 };
   switch (k) {
     case 'lib': return <rect x={x - s} y={y - s} width={2 * s} height={2 * s} rx={s * 0.4} fill={c} {...st} />;
-    case 'csc': return <path d={`M${x} ${y - s * 1.4}L${x + s * 1.4} ${y}L${x} ${y + s * 1.4}L${x - s * 1.4} ${y}Z`} fill={c} {...st} />;
+    case 'csc': return <path d={`M${x} ${y - s * 1.3}L${x + s * 1.3} ${y}L${x} ${y + s * 1.3}L${x - s * 1.3} ${y}Z`} fill={c} {...st} />;
     case 'park': return <path d={`M${x} ${y - s * 1.2}L${x + s * 1.2} ${y + s}L${x - s * 1.2} ${y + s}Z`} fill={c} {...st} />;
-    case 'college': return <rect x={x - s} y={y - s} width={2 * s} height={2 * s} fill={c} {...st} />;
-    case 'spray': return <circle cx={x} cy={y} r={s * 0.6} fill={c} />;
-    case 'cps': return <rect x={x - s * 0.9} y={y - s * 0.9} width={1.8 * s} height={1.8 * s} fill="#fff" stroke={c} strokeWidth={s * 0.3} />;
-    default: return <circle cx={x} cy={y} r={k === 'police' ? s * 1.1 : s} fill={c} {...st} />;
+    case 'college': return <rect x={x - s * 1.1} y={y - s * 1.1} width={2.2 * s} height={2.2 * s} rx={s * 0.3} fill={c} {...st} />;
+    case 'spray': return <circle cx={x} cy={y} r={s * 0.8} fill={c} {...st} />;
+    case 'cps': return <rect x={x - s} y={y - s} width={2 * s} height={2 * s} fill="#fff" stroke={c} strokeWidth={s * 0.35} />;
+    default: return <circle cx={x} cy={y} r={k === 'police' ? s * 1.15 : s} fill={c} {...st} />;
   }
 }
 
@@ -137,7 +137,7 @@ export function MapView({ layers, plan, lens, siteLayers, selected, onPick, view
               {L === 'cps' && <><br /><span className="k">Candidate site only, not in the City's cooling plan</span></>}
               {L !== 'lib' && L !== 'police' && L !== 'cps' && s.hours_of_operation && <><br /><span className="k">{s.hours_of_operation}</span></>}
             </>)} onMouseLeave={hide} opacity={isClosed ? 0.35 : 1}>
-              <SiteShape k={L} x={x} y={y} s={3.4 * k} />
+              <SiteShape k={L} x={x} y={y} s={5.5 * k} />
             </g>
           );
         })}</g>

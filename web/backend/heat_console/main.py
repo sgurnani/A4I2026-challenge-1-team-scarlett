@@ -48,7 +48,7 @@ class PlanRequest(BaseModel):
 
 
 class ActionRequest(BaseModel):
-    action: Literal["approve", "unapprove", "approve_all", "skip"]
+    action: Literal["approve", "unapprove", "approve_all", "skip", "reset"]
     keys: list[str] = Field(default_factory=list)
     kind: str | None = None
 
@@ -85,12 +85,15 @@ def create_app(settings: Settings | None = None, toolbox: ToolInvoker | None = N
             agent_box["agent"] = make_agent(s.agent_resource_name, s.project, s.location)
         return agent_box["agent"]
 
+    async def get_default_day() -> dict | None:
+        res = days_fn()
+        days_res = await res if inspect.iscoroutinefunction(days_fn) or inspect.isawaitable(res) else res
+        days = days_res.get("days", []) if isinstance(days_res, dict) else []
+        return next((d for d in days if d.get("high_f") == 102), days[0] if days else None)
+
     async def ready(request: Request) -> Board:
         if board.state is None:
-            res = days_fn()
-            days_res = await res if inspect.iscoroutinefunction(days_fn) or inspect.isawaitable(res) else res
-            days = days_res.get("days", []) if isinstance(days_res, dict) else []
-            default_day = next((d for d in days if d.get("high_f") == 102), days[0] if days else None)
+            default_day = await get_default_day()
             try:
                 await board.ensure(user(request), default_day)
             except BoardError as exc:
@@ -159,12 +162,22 @@ def create_app(settings: Settings | None = None, toolbox: ToolInvoker | None = N
             if len(req.keys) != 1:
                 raise HTTPException(422, "skip takes exactly one key")
             await b.skip(who, req.keys[0])
+        elif req.action == "reset":
+            default_day = await get_default_day()
+            await b.reset(who, default_day)
         return b.view()
 
     @app.post("/api/undo")
     async def undo(request: Request):
         b = await ready(request)
         await b.undo(user(request))
+        return b.view()
+
+    @app.post("/api/reset")
+    async def reset(request: Request):
+        b, who = await ready(request), user(request)
+        default_day = await get_default_day()
+        await b.reset(who, default_day)
         return b.view()
 
     @app.post("/api/chat")
