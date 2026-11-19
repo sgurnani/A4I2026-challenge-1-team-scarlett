@@ -19,6 +19,12 @@ Per table: `<dataset>/<table>/part-*.json.gz` (gzip JSON lines, GEOGRAPHY as tex
 Per view: `<dataset>/views/<view>.sql`. Per model: `<dataset>/models/<model>.metadata.json` plus exported files.
 `MANIFEST.tsv` lists every object with BigQuery vs downloaded row counts and a status.
 
+**What is in git:** only the three original challenge tables (data + schema, ~0.9 MB) and `MANIFEST.tsv` are
+committed (see the `data/backup/**` exceptions in `.gitignore`); they cannot be re-downloaded once the lab ends.
+The rest (~146 MB: OSM, routing network, enriched tables, console approvals with approver names) stays local /
+on Drive. A fresh clone can restore just the originals with the same command as Option B, pointing at
+`data/backup/20261118T0840` (the script restores whatever schemas are present: 3 loads, 3 row checks, no views).
+
 **Before sharing the backup:** federal data (NOAA, Census, USGS) is public domain; City of Chicago data is under the
 City's open-data terms; OpenStreetMap is ODbL (attribute "© OpenStreetMap contributors"). `dispatch_approvals.actor`
 and `dispatch_plan_versions.created_by` record who approved plans in the console: treat them as personal data.

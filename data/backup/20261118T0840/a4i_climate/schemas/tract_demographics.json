@@ -1,0 +1,62 @@
+[
+  {
+    "mode": "NULLABLE",
+    "name": "geo_id",
+    "type": "STRING"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "tract_lat",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "tract_lon",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "total_pop",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "median_age",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "median_income",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "housing_units",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "median_year_structure_built",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "no_cars",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "households",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "poverty_rate",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "no_vehicle_rate",
+    "type": "FLOAT"
+  }
+]
