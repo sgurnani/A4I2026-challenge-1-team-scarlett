@@ -202,3 +202,27 @@ In yesterday's recording the operator asks why one neighborhood is hotter than t
 - **Evidence is thinner than "24" suggests.** Treat it as 24 areas in 12 independent patches, which supports "wide interval, sanity gate, not a significance test".
 - **Rogers Park,** the area behind most of the r² gain, is one of the isolated single squares at the far north.
 - **Spoken answer:** "No. Each 2.7 km square was held out at random, so they ended up as 24 areas in 12 separate patches, all surrounded by training areas. It's a fair test of filling gaps inside the city, not of predicting a new one, and with 12 patches we treat the result as a sanity check, not proof."
+
+## 7. "What time periods does the data cover?"
+
+Checked against BigQuery on 2026-11-19.
+
+**Data the model learns from:**
+
+- **Street-level heat (NOAA Heat Watch, provided):** one summer afternoon, 48,855 readings in three one-hour windows. The campaign recorded no clock times (`observed_at` is empty in every row, which the brief says is expected), and its date is not in the data. This is the label the model predicts.
+- **Satellite surface heat (Landsat, ours):** 14 clear summer scenes, June 2019 to June 2025, all taken in June, July or August; each cell averages about 13 scenes. A multi-year summer average, not the campaign day.
+- **Pavement and tree canopy (USGS NLCD, ours):** 2021 release (imperviousness and tree canopy cover).
+- **Distance to the lake and map position:** fixed geography, no date.
+
+**Data the score and audit use:**
+
+- **Demographics (Census ACS, ours):** 2024 release, the 5-year estimate covering 2020-2024, on 2024 tract boundaries (799 Chicago tracts). The challenge-provided table was the older ACS 2022 vintage.
+- **Weather-station history (NOAA GHCN-Daily, provided):** daily highs and lows from Jan 1 2019 to Dec 31 2025 (seven years), 13 stations around Chicago including O'Hare and Midway. Answers "how often does it get this hot?", not "where is it hotter?".
+- **Cooling sites, libraries, schools (City of Chicago portal, ours):** snapshots downloaded on Nov 17 2026.
+- **Forecast (National Weather Service, ours):** the 7-day forecast pulled on Nov 17 2026 (Nov 17-24). In the product, tomorrow's expected temperature = forecast high + the model's offset.
+
+**Kept out of the model (comparison only):** CMAP tract canopy (2023 imagery), CTA transit schedule (Oct 29 to Dec 31 2026).
+
+**If a judge asks "the years don't line up, is that a problem?":** "The label is one afternoon, but the features are slow-changing physical things: pavement, tree cover, distance to the lake, and a multi-year summer average of surface heat. Those barely move over a few years, so they describe the same city the volunteers drove. The demographics are the newest Census release, because the plan is for today's residents."
+
+**Spoken version:** "The heat label is one summer afternoon of street readings. The model's inputs are a 2019 to 2025 summer satellite average and 2021 land cover. Demographics are the 2020 to 2024 Census, and the station history covers 2019 to 2025 to answer how often it gets this hot."
