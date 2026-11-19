@@ -1,0 +1,37 @@
+[
+  {
+    "mode": "NULLABLE",
+    "name": "city",
+    "type": "STRING"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "longitude",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "latitude",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "temp_f",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "heat_index_f",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "humidity_pct",
+    "type": "FLOAT"
+  },
+  {
+    "mode": "NULLABLE",
+    "name": "observed_at",
+    "type": "TIMESTAMP"
+  }
+]

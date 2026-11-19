@@ -48,3 +48,21 @@ ai_analyst_plus/
 # Repo-local gcloud config/credentials (CLOUDSDK_CONFIG); never commit
 .gcloud/
 
+
+# Local BigQuery exports (scripts/export_bigquery_local.sh); never commit data
+# Local BigQuery backups (scripts/export_bigquery_local.sh). Only the three ORIGINAL challenge tables
+# (~1 MB) and the manifest are committed; the full backup stays local / on Drive.
+data/backup/**
+!data/backup/*/
+!data/backup/*/MANIFEST.tsv
+!data/backup/*/a4i_climate/
+!data/backup/*/a4i_climate/schemas/
+!data/backup/*/a4i_climate/schemas/heat_observations.json
+!data/backup/*/a4i_climate/schemas/station_daily_temps.json
+!data/backup/*/a4i_climate/schemas/tract_demographics.json
+!data/backup/*/a4i_climate/heat_observations/
+!data/backup/*/a4i_climate/heat_observations/**
+!data/backup/*/a4i_climate/station_daily_temps/
+!data/backup/*/a4i_climate/station_daily_temps/**
+!data/backup/*/a4i_climate/tract_demographics/
+!data/backup/*/a4i_climate/tract_demographics/**

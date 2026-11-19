@@ -1,5 +1,8 @@
 # Data recovery baseline
 
+> **After the hackathon:** this in-project backup disappears with the lab project. To keep the data, use the local
+> backup and restore steps in [LOCAL_BACKUP_RECOVERY.md](LOCAL_BACKUP_RECOVERY.md).
+
 ## Verified baseline
 
 Source: `qwiklabs-gcp-04-3e58e01275b8.a4i_climate`.
